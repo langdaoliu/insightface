@@ -61,7 +61,7 @@ def main(args):
     margin_softmax = losses.get_loss(cfg.loss)
     module_partial_fc = PartialFC(
         rank=rank, local_rank=local_rank, world_size=world_size, resume=cfg.resume,
-        batch_size=cfg.batch_size, margin_softmax=margin_softmax, num_classes=cfg.num_classes,
+        batch_size=cfg.batch_size,mag=cfg.mag, margin_softmax=margin_softmax, num_classes=cfg.num_classes,
         sample_rate=cfg.sample_rate, embedding_size=cfg.embedding_size, prefix=cfg.output)
 
     opt_backbone = torch.optim.SGD(

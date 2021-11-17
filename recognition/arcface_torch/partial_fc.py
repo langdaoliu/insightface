@@ -17,7 +17,7 @@ class PartialFC(Module):
     """
 
     @torch.no_grad()
-    def __init__(self, rank, local_rank, world_size, batch_size, resume,
+    def __init__(self, rank, local_rank, world_size, batch_size,mag, resume,
                  margin_softmax, num_classes, sample_rate=1.0, embedding_size=512, prefix="./"):
         """
         rank: int
@@ -51,6 +51,7 @@ class PartialFC(Module):
         self.device: torch.device = torch.device("cuda:{}".format(self.local_rank))
         self.world_size: int = world_size
         self.batch_size: int = batch_size
+        self.mag: bool = mag
         self.margin_softmax: callable = margin_softmax
         self.sample_rate: float = sample_rate
         self.embedding_size: int = embedding_size
@@ -181,7 +182,10 @@ class PartialFC(Module):
         total_features.requires_grad = True
 
         logits = self.forward(total_features, norm_weight)
-        logits = self.margin_softmax(logits, total_label)
+        if self.mag == False:
+            logits = self.margin_softmax(logits, total_label)
+        else:
+            logits,gloss = self.margin_softmax(total_features,logits, total_label)
 
         with torch.no_grad():
             max_fc = torch.max(logits, dim=1, keepdim=True)[0]
@@ -210,7 +214,7 @@ class PartialFC(Module):
             # calculate grad
             grad[index] -= one_hot
             grad.div_(self.batch_size * self.world_size)
-
+        
         logits.backward(grad)
         if total_features.grad is not None:
             total_features.grad.detach_()
@@ -218,5 +222,9 @@ class PartialFC(Module):
         # feature gradient all-reduce
         dist.reduce_scatter(x_grad, list(total_features.grad.chunk(self.world_size, dim=0)))
         x_grad = x_grad * self.world_size
+        # if self.mag:
+        #     gloss.clamp_min_(1e-30)
+        #     x_grad.add_(gloss)
+        #     loss_v += gloss
         # backward backbone
         return x_grad, loss_v
